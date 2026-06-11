@@ -1,0 +1,136 @@
+import Curso from '../models/Curso';
+import Seccion from '../models/Seccion';
+import Profesor from '../models/Profesor';
+import BloqueTiempo from '../models/BloqueTiempo';
+import type { HorarioAPI, ProfesorAPI, SeccionAPI } from '../types/ofertaDeCursosAPI';
+
+const API = 'https://ofertadecursos.uniandes.edu.co/api/courses';
+
+const API_POR_CURSO_Y_PERIODO = (codigoCurso: string, periodo: string = '') =>
+  API + `?term=${periodo}&ptrm=&prefix=&attr=&nameInput=${codigoCurso.toUpperCase()}`;
+
+const API_CON_FILTROS = (query: string, attr: string, prog: string, periodo: string) => {
+  const params = new URLSearchParams({
+    term: periodo,
+    ptrm: '',
+    prefix: prog,
+    attr: '',
+    nameInput: query.toUpperCase(),
+    campus: '',
+    attrs: attr,
+    timeStart: '',
+    offset: '0',
+    limit: '50',
+  })
+  return `${API}?${params.toString()}`
+}
+
+function listaDeBloquesEsIdentica(a: string[], b: string[]) {
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((valor, index) => valor === sortedB[index]);
+}
+
+function cargarHorariosSeccion(seccion: Seccion, horarios: HorarioAPI[]) {
+  for (const horario of horarios) {
+    const diasDondeAplica: string[] = [];
+    for (const dia of 'lmijvs') {
+      if (horario[dia as keyof HorarioAPI]) {
+        diasDondeAplica.push(dia);
+      }
+    }
+    const nuevoBloque = new BloqueTiempo(
+      0,
+      horario.classroom,
+      seccion.titulo,
+      diasDondeAplica,
+      horario.time_ini,
+      horario.time_fin,
+    );
+    const existe = seccion.horarios.some(
+      bloque =>
+        bloque.horaInicio === nuevoBloque.horaInicio &&
+        bloque.horaFin === nuevoBloque.horaFin &&
+        listaDeBloquesEsIdentica(bloque.dias, nuevoBloque.dias),
+    );
+    if (!existe) {
+      seccion.horarios.push(nuevoBloque);
+    }
+  }
+}
+
+function cargarProfesoresSeccion(seccion: Seccion, profesores: ProfesorAPI[]) {
+  if (profesores.length === 0) {
+    seccion.profesores.push(new Profesor('NO DEFINIDO'));
+  }
+  for (const profesor of profesores) {
+    const nombreProfesor = profesor.name || 'NO DEFINIDO';
+    seccion.profesores.push(new Profesor(nombreProfesor));
+  }
+}
+
+function obtenerDuracionSeccion(seccion: SeccionAPI) {
+  let duracion = '16';
+  if (seccion.ptrm === '8A' || seccion.ptrm === '8B') {
+    duracion = seccion.ptrm;
+  }
+  return duracion;
+}
+
+function crearSeccionDeCurso(curso: Curso, informacionSeccion: SeccionAPI) {
+  const seccion = new Seccion(
+    informacionSeccion.nrc,
+    informacionSeccion.section,
+    informacionSeccion.title,
+    informacionSeccion.maxenrol,
+    informacionSeccion.enrolled,
+    informacionSeccion.campus,
+    new Date(informacionSeccion.schedules[0]?.date_ini),
+    new Date(informacionSeccion.schedules[0]?.date_fin),
+    curso,
+    obtenerDuracionSeccion(informacionSeccion),
+    informacionSeccion.term,
+  );
+  cargarProfesoresSeccion(seccion, informacionSeccion.instructors);
+  cargarHorariosSeccion(seccion, informacionSeccion.schedules);
+  return seccion;
+}
+
+async function crearCursosAPartirDePeticion(ruta: string) {
+  const respuesta = await fetch(ruta);
+  const data = await respuesta.json();
+  const cursosEncontrados: { [codigoCurso: string]: Curso } = {};
+
+  data.map((informacionSeccion: SeccionAPI) => {
+    const codigoCurso = informacionSeccion.class + informacionSeccion.course;
+    if (!(codigoCurso in cursosEncontrados)) {
+      cursosEncontrados[codigoCurso] = new Curso(
+        informacionSeccion.class,
+        informacionSeccion.course,
+        informacionSeccion.credits,
+        informacionSeccion.attr.map(atributo => atributo.code),
+        informacionSeccion.title,
+      );
+    }
+    const seccion = crearSeccionDeCurso(cursosEncontrados[codigoCurso], informacionSeccion);
+    cursosEncontrados[codigoCurso].secciones.push(seccion);
+  });
+  return cursosEncontrados;
+}
+
+export async function buscarCurso(nombreCursoABuscar: string, periodo: string = '') {
+  return await crearCursosAPartirDePeticion(API_POR_CURSO_Y_PERIODO(nombreCursoABuscar, periodo));
+}
+
+export async function buscarCursoConFiltros(
+  query: string,
+  attr: string = '',
+  prog: string = '',
+  periodo: string = '202620',
+) {
+  return await crearCursosAPartirDePeticion(API_CON_FILTROS(query, attr, prog, periodo));
+}
+
+export const atributosEspeciales: string[] = ['', 'EPSI', 'INGL', 'ECUR', 'BLEND', 'SEMP', 'VIRT'];
+
+export const programasEspeciales: string[] = ['', 'ADMI', 'CBCA', 'CBCO', 'CBPC', 'CBCC', 'DEPO', 'ARQU', 'DISE', 'INGE', 'CIEN', 'MATE', 'FISI', 'QUIM', 'BIOL', 'MEDI', 'DER', 'ECON', 'ARTE', 'HUMA', 'LENG', 'FILO', 'HIST', 'PSIC', 'EDUF', 'ENFE', 'ODON', 'BACT'];
