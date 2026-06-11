@@ -49,8 +49,9 @@ export function usePlans(cursos: Curso[]) {
     return Array.from(map.values())
   }, [cursos, cacheCursos])
 
-  /* Al cambiar de plan activo, busca automáticamente los cursos
-     que tengan secciones guardadas pero aún no estén cargados */
+  /* Cuando cambia el plan activo o se reemplazan los resultados de
+     búsqueda, trae automáticamente los cursos que tengan secciones
+     guardadas en el plan pero que aún no estén cargados */
   useEffect(() => {
     if (!planActivo) return
     const cargados = new Set(cursosCombinados.map(c => c.codigo))
@@ -71,7 +72,7 @@ export function usePlans(cursos: Curso[]) {
           .finally(() => { fetching.current.delete(match[1]) })
       }
     }
-  }, [planActivoId])
+  }, [planActivoId, cursos])
 
   const planActivo = useMemo(
     () => planes.find(p => p.id === planActivoId) || planes[0],
