@@ -5,8 +5,9 @@ import BloqueTiempo from '../models/BloqueTiempo';
 import type { HorarioAPI, ProfesorAPI, SeccionAPI } from '../types/ofertaDeCursosAPI';
 
 const API = 'https://ofertadecursos.uniandes.edu.co/api/courses';
+const LIMITE = 25;
 
-function buildURL(query: string, attr: string, prog: string, periodo: string) {
+function buildURL(query: string, attr: string, prog: string, periodo: string, offset: number = 0) {
   const params = new URLSearchParams()
   params.set('term', periodo)
   params.set('ptrm', '')
@@ -17,16 +18,47 @@ function buildURL(query: string, attr: string, prog: string, periodo: string) {
   params.set('campus', '')
   params.set('attrs', attr)
   params.set('timeStart', '')
-  params.set('offset', '0')
-  params.set('limit', '50')
+  params.set('offset', String(offset))
+  params.set('limit', String(LIMITE))
   return `${API}?${params.toString()}`
 }
 
-const API_POR_CURSO_Y_PERIODO = (codigoCurso: string, periodo: string = '') =>
-  buildURL(codigoCurso, '', '', periodo)
+async function crearCursosAPartirDePeticion(ruta: string) {
+  const respuesta = await fetch(ruta);
+  const data: SeccionAPI[] = await respuesta.json();
+  const cursosEncontrados: { [codigoCurso: string]: Curso } = {};
 
-const API_CON_FILTROS = (query: string, attr: string, prog: string, periodo: string) =>
-  buildURL(query, attr, prog, periodo)
+  data.forEach((informacionSeccion: SeccionAPI) => {
+    const codigoCurso = informacionSeccion.class + informacionSeccion.course;
+    if (!(codigoCurso in cursosEncontrados)) {
+      cursosEncontrados[codigoCurso] = new Curso(
+        informacionSeccion.class,
+        informacionSeccion.course,
+        informacionSeccion.credits,
+        informacionSeccion.attr.map(atributo => atributo.code),
+        informacionSeccion.title,
+      );
+    }
+    const seccion = crearSeccionDeCurso(cursosEncontrados[codigoCurso], informacionSeccion);
+    cursosEncontrados[codigoCurso].secciones.push(seccion);
+  });
+
+  return { cursos: cursosEncontrados, hasMore: data.length >= LIMITE };
+}
+
+export async function buscarCurso(nombreCursoABuscar: string, periodo: string = '') {
+  return await crearCursosAPartirDePeticion(buildURL(nombreCursoABuscar, '', '', periodo));
+}
+
+export async function buscarCursoConFiltros(
+  query: string,
+  attr: string = '',
+  prog: string = '',
+  periodo: string = '202620',
+  offset: number = 0,
+) {
+  return await crearCursosAPartirDePeticion(buildURL(query, attr, prog, periodo, offset));
+}
 
 function listaDeBloquesEsIdentica(a: string[], b: string[]) {
   const sortedA = [...a].sort();
@@ -97,41 +129,6 @@ function crearSeccionDeCurso(curso: Curso, informacionSeccion: SeccionAPI) {
   cargarProfesoresSeccion(seccion, informacionSeccion.instructors);
   cargarHorariosSeccion(seccion, informacionSeccion.schedules);
   return seccion;
-}
-
-async function crearCursosAPartirDePeticion(ruta: string) {
-  const respuesta = await fetch(ruta);
-  const data = await respuesta.json();
-  const cursosEncontrados: { [codigoCurso: string]: Curso } = {};
-
-  data.map((informacionSeccion: SeccionAPI) => {
-    const codigoCurso = informacionSeccion.class + informacionSeccion.course;
-    if (!(codigoCurso in cursosEncontrados)) {
-      cursosEncontrados[codigoCurso] = new Curso(
-        informacionSeccion.class,
-        informacionSeccion.course,
-        informacionSeccion.credits,
-        informacionSeccion.attr.map(atributo => atributo.code),
-        informacionSeccion.title,
-      );
-    }
-    const seccion = crearSeccionDeCurso(cursosEncontrados[codigoCurso], informacionSeccion);
-    cursosEncontrados[codigoCurso].secciones.push(seccion);
-  });
-  return cursosEncontrados;
-}
-
-export async function buscarCurso(nombreCursoABuscar: string, periodo: string = '') {
-  return await crearCursosAPartirDePeticion(API_POR_CURSO_Y_PERIODO(nombreCursoABuscar, periodo));
-}
-
-export async function buscarCursoConFiltros(
-  query: string,
-  attr: string = '',
-  prog: string = '',
-  periodo: string = '202620',
-) {
-  return await crearCursosAPartirDePeticion(API_CON_FILTROS(query, attr, prog, periodo));
 }
 
 export const atributosEspeciales: string[] = ['', 'EPSI', 'INGL', 'ECUR', 'BLEND', 'SEMP', 'VIRT'];

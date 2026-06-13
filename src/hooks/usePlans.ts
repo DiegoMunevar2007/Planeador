@@ -83,7 +83,7 @@ export function usePlans(cursos: Curso[]) {
         fetching.current.add(match[1])
         buscarCurso(match[1], '202620')
           .then(result => {
-            const nuevos = Object.values(result)
+            const nuevos = Object.values(result.cursos)
             setCacheCursos(prev => {
               const next = new Map(prev)
               for (const c of nuevos) next.set(c.codigo, c)
@@ -94,7 +94,7 @@ export function usePlans(cursos: Curso[]) {
           .finally(() => { fetching.current.delete(match[1]) })
       }
     }
-  }, [planActivoId, cursos])
+  }, [planActivo, cursos])
 
   useEffect(() => {
     if (!planActivo) {

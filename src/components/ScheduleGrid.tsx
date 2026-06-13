@@ -1,16 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { AcademicCapIcon, CalendarDaysIcon, UserGroupIcon, MapPinIcon } from '@heroicons/react/24/solid'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
 import Seccion from '../models/Seccion'
-import { DIAS, DIAS_CORTO, DIAS_LABEL, horaStrAMinutos } from '../utils/timeUtils'
+import { DIAS, DIAS_CORTO, horaStrAMinutos } from '../utils/timeUtils'
+import SeccionDetailDialog from './SeccionDetailDialog'
 
 interface ColorScheme {
   bg: string; border: string; text: string; accent: string
@@ -85,6 +77,12 @@ export default function ScheduleGrid({ secciones, seccionesEnConflicto, loading 
   const conflictoBg = isDark ? 'rgba(239,68,68,0.12)' : '#fef2f2'
   const conflictoBorder = '#ef4444'
 
+  const colorAccent = useMemo(() => {
+    if (!selectedSeccion) return '#6366f1'
+    const idx = secciones.indexOf(selectedSeccion)
+    return COLORES[idx % COLORES.length]?.accent || '#6366f1'
+  }, [selectedSeccion, secciones, COLORES])
+
   if (loading) {
     return (
       <div className="flex-1 overflow-auto p-6 flex items-center justify-center">
@@ -140,18 +138,6 @@ export default function ScheduleGrid({ secciones, seccionesEnConflicto, loading 
   const horas: number[] = []
   for (let m = HORA_INICIO; m <= HORA_FIN; m += 60) {
     horas.push(m)
-  }
-
-  const dialogSeccion = selectedSeccion
-  const enConflicto = dialogSeccion ? seccionesEnConflicto.has(dialogSeccion) : false
-
-  const formatSchedule = (sec: Seccion) => {
-    return sec.horarios
-      .filter(h => h.horaInicio && h.horaFin)
-      .map(h => {
-        const dias = h.dias.map(d => DIAS_LABEL[d] || d).join(' ')
-        return `${dias} ${h.horaInicio.slice(0, 2)}:${h.horaInicio.slice(2, 4)} - ${h.horaFin.slice(0, 2)}:${h.horaFin.slice(2, 4)}`
-      })
   }
 
   return (
@@ -277,106 +263,14 @@ export default function ScheduleGrid({ secciones, seccionesEnConflicto, loading 
         </div>
       </div>
 
-      {/* Info dialog */}
-      <Dialog open={!!dialogSeccion} onOpenChange={(open) => { if (!open) setSelectedSeccion(null) }}>
-        <DialogContent className="sm:max-w-md">
-          {dialogSeccion && (
-            <>
-              <DialogHeader>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold tracking-tight text-white"
-                    style={{ background: COLORES[secciones.indexOf(dialogSeccion) % COLORES.length]?.accent || '#6366f1' }}
-                  >
-                    {dialogSeccion.curso.codigo}
-                  </span>
-                  <DialogTitle>{dialogSeccion.curso.titulo}</DialogTitle>
-                </div>
-                <DialogDescription>
-                  Sección {dialogSeccion.numero} — NRC {dialogSeccion.nrc}
-                  {enConflicto && (
-                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-                      Conflicto de horario
-                    </span>
-                  )}
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="grid gap-3 py-2">
-                <div className="flex items-start gap-3">
-                  <CalendarDaysIcon className="size-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium">Horario</p>
-                    {formatSchedule(dialogSeccion).map((s, i) => (
-                      <p key={i} className="text-xs text-muted-foreground">{s}</p>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <UserGroupIcon className="size-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium">Profesor{dialogSeccion.profesores.length !== 1 ? 'es' : ''}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {dialogSeccion.profesores.length > 0
-                        ? dialogSeccion.profesores.map(p => p.nombre).join(', ')
-                        : 'Sin asignar'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <AcademicCapIcon className="size-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium">Créditos</p>
-                    <p className="text-xs text-muted-foreground">{dialogSeccion.curso.creditos} créd.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <MapPinIcon className="size-4 mt-0.5 text-muted-foreground flex-shrink-0" />
-                  <div>
-                    <p className="text-xs font-medium">Campus y duración</p>
-                    <p className="text-xs text-muted-foreground">
-                      {dialogSeccion.campus}
-                      {dialogSeccion.ptrm !== '16' ? ` — ${dialogSeccion.ptrm}` : ''}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <svg className="size-4 mt-0.5 text-muted-foreground flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <div>
-                    <p className="text-xs font-medium">Cupos</p>
-                    <p className="text-xs text-muted-foreground">
-                      {parseInt(dialogSeccion.maxEnrol) - parseInt(dialogSeccion.enrolled)} / {dialogSeccion.maxEnrol} disponibles
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2 border-t">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => { onRemoveSeccion(dialogSeccion); setSelectedSeccion(null) }}
-                >
-                  Quitar del plan
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSelectedSeccion(null)}
-                >
-                  Cerrar
-                </Button>
-              </div>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <SeccionDetailDialog
+        seccion={selectedSeccion}
+        open={!!selectedSeccion}
+        onOpenChange={(open) => { if (!open) setSelectedSeccion(null) }}
+        onRemoveSeccion={onRemoveSeccion}
+        enConflicto={selectedSeccion ? seccionesEnConflicto.has(selectedSeccion) : false}
+        colorAccent={colorAccent}
+      />
     </>
   )
 }
