@@ -6,24 +6,27 @@ import type { HorarioAPI, ProfesorAPI, SeccionAPI } from '../types/ofertaDeCurso
 
 const API = 'https://ofertadecursos.uniandes.edu.co/api/courses';
 
-const API_POR_CURSO_Y_PERIODO = (codigoCurso: string, periodo: string = '') =>
-  API + `?term=${periodo}&ptrm=&prefix=&attr=&nameInput=${codigoCurso.toUpperCase()}`;
-
-const API_CON_FILTROS = (query: string, attr: string, prog: string, periodo: string) => {
-  const params = new URLSearchParams({
-    term: periodo,
-    ptrm: '',
-    prefix: prog,
-    attr: '',
-    nameInput: query.toUpperCase(),
-    campus: '',
-    attrs: attr,
-    timeStart: '',
-    offset: '0',
-    limit: '50',
-  })
+function buildURL(query: string, attr: string, prog: string, periodo: string) {
+  const params = new URLSearchParams()
+  params.set('term', periodo)
+  params.set('ptrm', '')
+  params.set('prefix', prog)
+  params.set('attr', '')
+  // The API uses SQL LIKE wildcards — % matches any characters between words
+  params.set('nameInput', query.toUpperCase().trim().split(/\s+/).join('%'))
+  params.set('campus', '')
+  params.set('attrs', attr)
+  params.set('timeStart', '')
+  params.set('offset', '0')
+  params.set('limit', '50')
   return `${API}?${params.toString()}`
 }
+
+const API_POR_CURSO_Y_PERIODO = (codigoCurso: string, periodo: string = '') =>
+  buildURL(codigoCurso, '', '', periodo)
+
+const API_CON_FILTROS = (query: string, attr: string, prog: string, periodo: string) =>
+  buildURL(query, attr, prog, periodo)
 
 function listaDeBloquesEsIdentica(a: string[], b: string[]) {
   const sortedA = [...a].sort();

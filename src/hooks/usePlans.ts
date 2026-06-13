@@ -34,6 +34,7 @@ export function usePlans(cursos: Curso[]) {
   const [planes, setPlanes] = useState<PlanData[]>(cargarPlanes)
   const [planActivoId, setPlanActivoId] = useState(planes[0]?.id || 'default')
   const [cacheCursos, setCacheCursos] = useState<Map<string, Curso>>(new Map())
+  const [loading, setLoading] = useState(true)
   const fetching = useRef(new Set<string>())
 
   useEffect(() => {
@@ -49,9 +50,30 @@ export function usePlans(cursos: Curso[]) {
     return Array.from(map.values())
   }, [cursos, cacheCursos])
 
+  const planActivo = useMemo(
+    () => planes.find(p => p.id === planActivoId) || planes[0],
+    [planes, planActivoId],
+  )
+
+  const seccionesMap = useMemo(() => {
+    const map = new Map<string, Seccion>()
+    for (const curso of cursosCombinados) {
+      for (const sec of curso.secciones) {
+        map.set(sec.idUnico, sec)
+      }
+    }
+    return map
+  }, [cursosCombinados])
+
+  const seccionesActivas = useMemo(() => {
+    return (planActivo?.seccionIds || [])
+      .map(id => seccionesMap.get(id))
+      .filter((s): s is Seccion => s !== undefined)
+  }, [planActivo, seccionesMap])
+
   /* Cuando cambia el plan activo o se reemplazan los resultados de
-     búsqueda, trae automáticamente los cursos que tengan secciones
-     guardadas en el plan pero que aún no estén cargados */
+      búsqueda, trae automáticamente los cursos que tengan secciones
+      guardadas en el plan pero que aún no estén cargados */
   useEffect(() => {
     if (!planActivo) return
     const cargados = new Set(cursosCombinados.map(c => c.codigo))
@@ -74,26 +96,22 @@ export function usePlans(cursos: Curso[]) {
     }
   }, [planActivoId, cursos])
 
-  const planActivo = useMemo(
-    () => planes.find(p => p.id === planActivoId) || planes[0],
-    [planes, planActivoId],
-  )
-
-  const seccionesMap = useMemo(() => {
-    const map = new Map<string, Seccion>()
-    for (const curso of cursosCombinados) {
-      for (const sec of curso.secciones) {
-        map.set(sec.idUnico, sec)
-      }
+  useEffect(() => {
+    if (!planActivo) {
+      setLoading(false)
+      return
     }
-    return map
-  }, [cursosCombinados])
-
-  const seccionesActivas = useMemo(() => {
-    return (planActivo?.seccionIds || [])
-      .map(id => seccionesMap.get(id))
-      .filter((s): s is Seccion => s !== undefined)
-  }, [planActivo, seccionesMap])
+    if (planActivo.seccionIds.length === 0) {
+      setLoading(false)
+      return
+    }
+    if (seccionesActivas.length >= planActivo.seccionIds.length) {
+      setLoading(false)
+      return
+    }
+    const timer = setTimeout(() => setLoading(false), 3000)
+    return () => clearTimeout(timer)
+  }, [planActivo, seccionesActivas])
 
   const totalCreditos = useMemo(() => {
     const cursosUnicos = new Set<string>()
@@ -216,6 +234,7 @@ export function usePlans(cursos: Curso[]) {
     planActivo,
     seccionesActivas,
     totalCreditos,
+    loading,
     toggleSeccion,
     estaSeleccionada,
     crearPlan,
